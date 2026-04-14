@@ -47,6 +47,7 @@ const UI = {
             el.oninput = el.onchange = e => {
                 CONFIG[key] = type==='bool'?e.target.checked : type==='int'?parseInt(e.target.value) : type==='str'?e.target.value : parseFloat(e.target.value);
                 if (key === 'smoothing' || key === 'fftSize') audio.update();
+                this.saveToStorage();
             };
             if (el.type === 'range') syncNum(el);
         };
@@ -57,12 +58,15 @@ const UI = {
         link('s-radial-bars','radialBars','int');
         link('s-radial-radius','radialRadius','float');
         link('s-ring-separation','ringSeparation','float');
+        link('s-shape-speed','shapeSpeed','float');
+        link('s-shape-change-point','shapeChangePoint','float');
 
         // FX toggle/slider bindings
         const fxLink = (id, key, type) => {
             const el = document.getElementById(id); if (!el) return;
             el.oninput = el.onchange = e => {
                 CONFIG.fx[key] = type==='bool' ? e.target.checked : type==='int' ? parseInt(e.target.value) : parseFloat(e.target.value);
+                this.saveToStorage();
             };
             if (el.type === 'range') syncNum(el);
         };
@@ -203,23 +207,27 @@ const UI = {
 
         fillAutoToggle.onchange = () => {
             CONFIG.shapeColor = fillAutoToggle.checked ? null : fillColorInput.value;
+            this.saveToStorage();
         };
         fillColorInput.oninput = () => {
             if (!fillAutoToggle.checked) CONFIG.shapeColor = fillColorInput.value;
+            this.saveToStorage();
         };
         strokeAutoToggle.onchange = () => {
             CONFIG.strokeColor = strokeAutoToggle.checked ? null : strokeColorInput.value;
+            this.saveToStorage();
         };
         strokeColorInput.oninput = () => {
             if (!strokeAutoToggle.checked) CONFIG.strokeColor = strokeColorInput.value;
+            this.saveToStorage();
         };
 
         // Hollow + bar style
-        document.getElementById('s-hollow').onchange = e => { CONFIG.hollowShape = e.target.checked; };
-        document.getElementById('s-bar-style').onchange = e => { CONFIG.barStyle = e.target.value; };
+        document.getElementById('s-hollow').onchange = e => { CONFIG.hollowShape = e.target.checked; this.saveToStorage(); };
+        document.getElementById('s-bar-style').onchange = e => { CONFIG.barStyle = e.target.value; this.saveToStorage(); };
 
         // Background color
-        document.getElementById('s-bg-color').oninput = e => { CONFIG.bgColor = e.target.value; };
+        document.getElementById('s-bg-color').oninput = e => { CONFIG.bgColor = e.target.value; this.saveToStorage(); };
         // Background image
         document.getElementById('btn-bg-image').onclick = () => document.getElementById('bg-file-input').click();
         document.getElementById('bg-file-input').onchange = e => {
@@ -244,6 +252,31 @@ const UI = {
         document.getElementById('btn-record-video').onclick = () => Exporter.startVideo();
         document.getElementById('btn-record-png').onclick = () => Exporter.startPng();
         document.getElementById('btn-export-json').onclick = () => { STATE.recordingJson ? Exporter.stopJson() : Exporter.startJson(); };
+
+        // Settings: save/load/reset
+        document.getElementById('btn-save-preset').onclick = () => this.savePreset();
+        document.getElementById('btn-load-preset').onclick = () => document.getElementById('preset-file-input').click();
+        document.getElementById('preset-file-input').onchange = e => {
+            const file = e.target.files[0]; if (!file) return;
+            const r = new FileReader();
+            r.onload = ev => {
+                try {
+                    const data = JSON.parse(ev.target.result);
+                    this.applyConfig(data);
+                    this.toast('Preset loaded: ' + file.name);
+                } catch(err) { this.toast('Invalid preset file'); }
+            };
+            r.readAsText(file);
+            e.target.value = '';
+        };
+        document.getElementById('btn-reset-settings').onclick = () => {
+            this.applyConfig(DEFAULT_CONFIG);
+            localStorage.removeItem('twill9000_settings');
+            this.toast('Settings reset to defaults');
+        };
+
+        // Restore from localStorage on init
+        this.loadFromStorage();
 
         // Drag & drop
         window.ondragover = e => { e.preventDefault(); document.getElementById('drop-overlay').style.display='flex'; };
@@ -335,5 +368,121 @@ const UI = {
 
         // Invalidate edge cache
         STATE.svgEdgeCache = { shapeKey: null, bars: 0, distances: null };
+    },
+
+    // --- SETTINGS PERSISTENCE ---
+
+    // Save current CONFIG as a JSON file download
+    savePreset() {
+        const data = JSON.parse(JSON.stringify(CONFIG));
+        delete data.bgImage; // not serializable
+        const json = JSON.stringify(data, null, 2);
+        const blob = new Blob([json], { type: 'application/json' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `twill9000_preset_${Date.now()}.json`;
+        a.click();
+        URL.revokeObjectURL(a.href);
+        this.toast('Preset saved');
+    },
+
+    // Apply a config object to CONFIG and sync all UI controls
+    applyConfig(data) {
+        // Deep merge: handle nested fx object
+        if (data.fx) {
+            Object.assign(CONFIG.fx, data.fx);
+            delete data.fx;
+        }
+        Object.assign(CONFIG, data);
+
+        // Sync all UI controls to match CONFIG
+        this.syncUIFromConfig();
+        this.saveToStorage();
+    },
+
+    // Push CONFIG values into all DOM controls
+    syncUIFromConfig() {
+        const setVal = (id, val) => {
+            const el = document.getElementById(id); if (!el) return;
+            if (el.type === 'checkbox') el.checked = val;
+            else el.value = val;
+            // Also sync the number input if it exists
+            const num = document.getElementById(id + '-num');
+            if (num) num.value = val;
+        };
+
+        // Top-level CONFIG fields
+        setVal('s-voice-mode', CONFIG.voiceMode);
+        setVal('s-sensitivity', CONFIG.sensitivity);
+        setVal('s-smoothing', CONFIG.voiceSmoothing);
+        setVal('s-palette', CONFIG.palette);
+        setVal('s-radial-bars', CONFIG.radialBars);
+        setVal('s-radial-radius', CONFIG.radialRadius);
+        setVal('s-ring-separation', CONFIG.ringSeparation);
+        setVal('s-shape-speed', CONFIG.shapeSpeed);
+        setVal('s-shape-change-point', CONFIG.shapeChangePoint);
+        setVal('s-bg-color', CONFIG.bgColor);
+        setVal('s-shape-fill-color', CONFIG.shapeColor || '#ef213a');
+        setVal('s-shape-fill-auto', CONFIG.shapeColor === null);
+        setVal('s-shape-stroke-color', CONFIG.strokeColor || '#1866ee');
+        setVal('s-shape-stroke-auto', CONFIG.strokeColor === null);
+        setVal('s-hollow', CONFIG.hollowShape);
+        setVal('s-bar-style', CONFIG.barStyle);
+        setVal('vol-slider', 0.8);
+
+        // FX fields
+        setVal('s-fx-show-bars', CONFIG.fx.showBars);
+        setVal('s-fx-rotate', CONFIG.fx.rotate);
+        setVal('s-fx-rotate-speed', CONFIG.fx.rotateSpeed);
+        setVal('s-fx-glow', CONFIG.fx.glow);
+        setVal('s-fx-glow-strength', CONFIG.fx.glowStrength);
+        setVal('s-fx-trails', CONFIG.fx.trails);
+        setVal('s-fx-trail-alpha', CONFIG.fx.trailAlpha);
+        setVal('s-fx-pulse-rings', CONFIG.fx.pulseRings);
+        setVal('s-fx-particles', CONFIG.fx.particles);
+        setVal('s-fx-gradient-bars', CONFIG.fx.gradientBars);
+        setVal('s-fx-bar-width', CONFIG.fx.barWidth);
+        setVal('s-fx-rounded-bars', CONFIG.fx.roundedBars);
+        setVal('s-fx-vignette', CONFIG.fx.vignette);
+        setVal('s-fx-bg-pulse', CONFIG.fx.bgPulse);
+
+        // Shape grid selection
+        const shapeGrid = document.getElementById('shape-grid');
+        if (shapeGrid) {
+            shapeGrid.querySelectorAll('.shape-thumb').forEach(el => {
+                el.classList.toggle('active', el.dataset.shape === CONFIG.shape);
+            });
+        }
+        const randomBtn = document.getElementById('btn-shape-random');
+        if (randomBtn) randomBtn.classList.toggle('active', CONFIG.shape === 'random');
+
+        // Load SVG path if needed
+        if (CONFIG.shape && CONFIG.shape.startsWith('svg-')) {
+            const id = parseInt(CONFIG.shape.split('-')[1]);
+            const svg = SVG_SHAPES.find(s => s.id === id);
+            if (svg) this.loadSvgShape(svg);
+        }
+
+        audio.update();
+    },
+
+    // Auto-save to localStorage
+    saveToStorage() {
+        try {
+            const data = JSON.parse(JSON.stringify(CONFIG));
+            delete data.bgImage;
+            localStorage.setItem('twill9000_settings', JSON.stringify(data));
+        } catch(e) { /* silent fail */ }
+    },
+
+    // Load from localStorage on startup
+    loadFromStorage() {
+        try {
+            const raw = localStorage.getItem('twill9000_settings');
+            if (raw) {
+                const data = JSON.parse(raw);
+                this.applyConfig(data);
+            }
+        } catch(e) { /* silent fail */ }
     }
 };

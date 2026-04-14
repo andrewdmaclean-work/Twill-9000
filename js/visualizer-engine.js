@@ -158,15 +158,22 @@ class Visualizer {
         const overflow = Math.max(0, fillScale - 1.0);      // energy beyond the cap
         const strokeR = shapeR * (1.01 + ve * 0.12) + innerR * overflow * sep * 1.2;
 
-        // Pick new random shape on emphasis (SVG shapes only, no circle)
-        if (CONFIG.shape === 'random' && em) {
+        // Pick new random shape on the downswing after cooldown elapses
+        // Triggers when energy is falling and in the mid-low range (not peak, not dead)
+        const now = performance.now();
+        const cooldownElapsed = (now - STATE.shapeChangeTimer) > CONFIG.shapeSpeed * 1000;
+        const falling = ve < STATE.lastVoiceEnergy;
+        const midLow = ve > CONFIG.shapeChangePoint * 0.3 && ve < CONFIG.shapeChangePoint;
+        if (CONFIG.shape === 'random' && cooldownElapsed && falling && midLow) {
             const svgKeys = SVG_SHAPES.map(s => 'svg-' + s.id);
             const picked = svgKeys[Math.floor(Math.random() * svgKeys.length)];
             STATE.currentRandomShape = picked;
             const id = parseInt(picked.split('-')[1]);
             const svg = SVG_SHAPES.find(s => s.id === id);
             if (svg) UI.loadSvgShape(svg);
+            STATE.shapeChangeTimer = now;
         }
+        STATE.lastVoiceEnergy = ve;
 
         ctx.save();
         ctx.translate(cx, cy);

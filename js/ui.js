@@ -58,8 +58,8 @@ const UI = {
         link('s-radial-bars','radialBars','int');
         link('s-radial-radius','radialRadius','float');
         link('s-ring-separation','ringSeparation','float');
-        link('s-shape-speed','shapeSpeed','float');
-        link('s-shape-change-point','shapeChangePoint','float');
+        link('s-random-change-chance','randomChangeChance','int');
+        link('s-random-change-cooldown','randomChangeCooldown','int');
 
         // FX toggle/slider bindings
         const fxLink = (id, key, type) => {
@@ -88,6 +88,22 @@ const UI = {
         // --- Shape grid ---
         const shapeGrid = document.getElementById('shape-grid');
         const svgFileInput = document.getElementById('svg-file-input');
+        const randomControlRows = [
+            document.getElementById('row-random-change-chance'),
+            document.getElementById('row-random-change-cooldown')
+        ];
+
+        const updateRandomControlsEnabled = () => {
+            const enabled = CONFIG.shape === 'random';
+            randomControlRows.forEach(row => {
+                if (!row) return;
+                row.style.opacity = enabled ? '1' : '0.45';
+                row.querySelectorAll('input').forEach(input => {
+                    input.disabled = !enabled;
+                });
+            });
+        };
+        this.updateRandomControlsEnabled = updateRandomControlsEnabled;
 
         // Helper: select a shape and highlight it
         const selectShape = (key) => {
@@ -102,6 +118,7 @@ const UI = {
                 const svg = SVG_SHAPES.find(s => s.id === id);
                 if (svg) this.loadSvgShape(svg);
             }
+            updateRandomControlsEnabled();
         };
 
         // Helper: create a thumbnail button
@@ -191,6 +208,7 @@ const UI = {
                     // Deselect grid thumbs
                     shapeGrid.querySelectorAll('.shape-thumb').forEach(el => el.classList.remove('active'));
                     document.getElementById('btn-shape-random').classList.remove('active');
+                    updateRandomControlsEnabled();
                     this.toast('Custom SVG loaded: ' + file.name);
                 } catch(err) {
                     this.toast('Error parsing SVG: ' + err.message);
@@ -290,6 +308,7 @@ const UI = {
             if (e.code==='KeyM') { STATE.mode = (STATE.mode+1)%MODE_NAMES.length; this.updateMode(); }
         });
 
+        updateRandomControlsEnabled();
         this.updateMode();
     },
 
@@ -419,8 +438,8 @@ const UI = {
         setVal('s-radial-bars', CONFIG.radialBars);
         setVal('s-radial-radius', CONFIG.radialRadius);
         setVal('s-ring-separation', CONFIG.ringSeparation);
-        setVal('s-shape-speed', CONFIG.shapeSpeed);
-        setVal('s-shape-change-point', CONFIG.shapeChangePoint);
+        setVal('s-random-change-chance', CONFIG.randomChangeChance);
+        setVal('s-random-change-cooldown', CONFIG.randomChangeCooldown);
         setVal('s-bg-color', CONFIG.bgColor);
         setVal('s-shape-fill-color', CONFIG.shapeColor || '#ef213a');
         setVal('s-shape-fill-auto', CONFIG.shapeColor === null);
@@ -463,6 +482,7 @@ const UI = {
             if (svg) this.loadSvgShape(svg);
         }
 
+        if (this.updateRandomControlsEnabled) this.updateRandomControlsEnabled();
         audio.update();
     },
 

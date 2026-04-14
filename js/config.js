@@ -62,10 +62,8 @@ const CONFIG = {
     strokeColor: '#1866ee',
     // Ring separation: 0 = ring hugs fill, 1 = max separation
     ringSeparation: 0.5,
-    // Random shape change cooldown in seconds (higher = slower changes)
-    shapeSpeed: 1,
-    // Energy level at which shape changes on the downswing (0 = silent, 1 = peak)
-    shapeChangePoint: 0.3,
+    randomChangeChance: 60, // 0..100 chance to change shape on emphasis
+    randomChangeCooldown: 20, // minimum frames between random shape changes
     // Visual FX (all off by default)
     fx: {
         showBars: true,
@@ -98,8 +96,8 @@ const STATE = {
     rotationAngle: 0,   // current rotation angle in radians
     // Shape state
     currentRandomShape: 'circle',  // current shape when in random mode
-    shapeChangeTimer: 0,           // timestamp of last shape change
-    lastVoiceEnergy: 0,            // previous frame's voice energy for detecting downswing    customSvgPath: null,           // Path2D from uploaded SVG
+    randomShapeCooldown: 0,        // frames remaining before next random shape change is allowed
+    customSvgPath: null,           // Path2D from uploaded SVG
     customSvgScale: 1,             // scale factor for custom SVG to fit radius
     // SVG edge distance cache (normalized, recomputed on shape change)
     svgEdgeCache: { shapeKey: null, bars: 0, distances: null }

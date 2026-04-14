@@ -80,6 +80,10 @@ function analyzeVoice(freq) {
     STATE.voiceEnergy = STATE.voiceEnergy * sm + rms * (1 - sm);
     STATE.voiceActive = STATE.voiceEnergy > 0.04;
 
+    // Separate smoothed energy for pulse lines (independent smoothing)
+    const lsm = CONFIG.fx.pulseLineSmoothing;
+    STATE.lineEnergy = (STATE.lineEnergy || 0) * lsm + rms * (1 - lsm);
+
     // Bass energy (20Hz-200Hz) for background pulse
     const bassEnd = Math.min(10, freq.length);
     let bassSum = 0;

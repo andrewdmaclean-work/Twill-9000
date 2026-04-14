@@ -60,15 +60,19 @@ class Visualizer {
         const bands = this.getVoiceBands(freq, 64);
         const ve = STATE.voiceEnergy, em = STATE.isEmphasis, sens = CONFIG.sensitivity;
 
-        switch(STATE.mode) {
-            case 0: this.radialEQ(ctx, w, h, cx, cy, bands, ve, em, sens); break;
-        }
+        // Pulse lines behind everything
+        if (fx.pulseLines) this.drawPulseLines(ctx, w, h, cx, cy, freq);
 
-        // Pulse rings (drawn after main visualization)
+        // Pulse rings
         if (fx.pulseRings) this.drawPulseRings(ctx, cx, cy);
 
-        // Particles (drawn on top)
+        // Particles
         if (fx.particles) this.drawParticles(ctx, w, h, cx, cy);
+
+        // Shape + bars drawn last so it's always in front
+        switch(STATE.mode) {
+            case 0: if (fx.showShape) this.radialEQ(ctx, w, h, cx, cy, bands, ve, em, sens); break;
+        }
 
         // Vignette overlay (drawn last)
         if (fx.vignette && !transparent) this.drawVignette(ctx, w, h, cx, cy);
@@ -504,6 +508,632 @@ class Visualizer {
             }
         }
         ctx.globalAlpha = 1;
+    }
+
+    // --- PULSE LINES ---
+    // Stage-quality horizontal lines extending from center shape to screen edges
+    drawPulseLines(ctx, w, h, cx, cy, freq) {
+        const p = PALETTES[CONFIG.palette];
+        const ve = STATE.lineEnergy || STATE.voiceEnergy;
+        const se = STATE.sustainedEnergy;
+        const fx = CONFIG.fx;
+        const innerR = Math.min(cx, cy) * CONFIG.radialRadius;
+        const intensity = fx.pulseLineIntensity;
+        const lineW = fx.pulseLineWidth;
+        const style = fx.pulseLineStyle || 'smooth';
+
+        const wave = audio.wave;
+        const bands = this.getVoiceBands(freq, 128);
+        const time = performance.now() / 1000;
+
+        const lineColor = fx.pulseLineColor || CONFIG.strokeColor || p[0];
+        // Secondary color for accents (next palette color)
+        const lineColor2 = fx.pulseLineColor || p[1] || lineColor;
+
+        // Spawn ripple on emphasis
+        if (STATE.isEmphasis) {
+            STATE.pulseLineRipples.push({
+                pos: 0, speed: 0.015 + ve * 0.025,
+                amplitude: 25 + ve * 60, width: 0.1 + ve * 0.08,
+                alpha: 0.9 + ve * 0.1, color: lineColor2
+            });
+        }
+
+        const shapeEdge = fx.showShape ? innerR * (0.72 + ve * 0.56) : 0;
+        const layout = fx.pulseLineLayout || 'center';
+
+        ctx.save();
+
+        // getDisp: compute vertical displacement
+        // t = 0..1 normalized position along the line
+        // envelope = amplitude multiplier (center-peaked for full, edge-fade for center)
+        const getDisp = (t, envelope) => {
+            const bandIdx = Math.floor(t * (bands.length - 1));
+            const bandVal = bands[bandIdx] || 0;
+            const waveIdx = Math.floor(t * (wave.length - 1));
+            const waveVal = ((wave[waveIdx] || 128) - 128) / 128;
+            const sens = fx.pulseLineSensitivity;
+            const freqDisp = bandVal * 80 * intensity * sens;
+            const waveDisp = waveVal * 50 * intensity * se;
+            let d = (freqDisp + waveDisp) * envelope;
+            d += Math.sin(t * 6 + time * 1.5) * 2 * envelope;
+            for (const ripple of STATE.pulseLineRipples) {
+                const dist = Math.abs(t - ripple.pos);
+                if (dist < ripple.width) {
+                    d += Math.cos((dist / ripple.width) * Math.PI) * 0.5 * ripple.amplitude * ripple.alpha;
+                }
+            }
+            return d;
+        };
+
+        // makeGrad: horizontal gradient
+        const makeGrad = (x1, x2, color) => {
+            const c = color || lineColor;
+            const grad = ctx.createLinearGradient(x1, cy, x2, cy);
+            if (layout === 'full') {
+                grad.addColorStop(0, c + '00');
+                grad.addColorStop(0.15, c + '66');
+                grad.addColorStop(0.5, c);
+                grad.addColorStop(0.85, c + '66');
+                grad.addColorStop(1, c + '00');
+            } else {
+                grad.addColorStop(0, c);
+                grad.addColorStop(0.5, c + 'aa');
+                grad.addColorStop(0.85, c + '33');
+                grad.addColorStop(1, c + '00');
+            }
+            return grad;
+        };
+
+        // computePoints: array of {t, x, d} for a run
+        const computePoints = (x1, x2, numSegs) => {
+            const pts = [];
+            for (let i = 0; i <= numSegs; i++) {
+                const t = i / numSegs;
+                const x = x1 + (x2 - x1) * t;
+                let envelope;
+                if (layout === 'full') {
+                    // center-peaked: 0 at edges, 1 at center (like reference image)
+                    envelope = Math.sin(t * Math.PI);
+                } else {
+                    // edge-fade: 1 near shape, 0 at edge
+                    envelope = Math.pow(1 - t, 0.8);
+                }
+                pts.push({ t, x, d: i === 0 && layout === 'center' ? 0 : getDisp(t, envelope) });
+            }
+            return pts;
+        };
+
+        // drawBezierPath: smooth bezier through points
+        const drawBezierPath = (pts, sign) => {
+            ctx.beginPath();
+            ctx.moveTo(pts[0].x, cy + pts[0].d * sign);
+            for (let i = 1; i < pts.length; i++) {
+                const prev = pts[i - 1];
+                const curr = pts[i];
+                const cpx = (prev.x + curr.x) / 2;
+                ctx.quadraticCurveTo(prev.x, cy + prev.d * sign, cpx, cy + (prev.d + curr.d) / 2 * sign);
+            }
+            const last = pts[pts.length - 1];
+            ctx.lineTo(last.x, cy + last.d * sign);
+        };
+
+        // Build run list: full = one pass left-to-right, center = two passes from shape edge outward
+        const runs = [];
+        const segStep = 3;
+        if (layout === 'full') {
+            const numSegs = Math.max(4, Math.floor(w / segStep));
+            runs.push({
+                pts: computePoints(0, w, numSegs),
+                x1: 0, x2: w
+            });
+        } else {
+            const rightDist = w - cx - shapeEdge;
+            const leftDist = cx - shapeEdge;
+            const rSegs = Math.max(4, Math.floor(rightDist / segStep));
+            const lSegs = Math.max(4, Math.floor(leftDist / segStep));
+            runs.push({
+                pts: computePoints(cx + shapeEdge, w, rSegs),
+                x1: cx + shapeEdge, x2: w
+            });
+            runs.push({
+                pts: computePoints(cx - shapeEdge, 0, lSegs),
+                x1: cx - shapeEdge, x2: 0
+            });
+        }
+
+        // --- RENDER ---
+        const mirrorCount = fx.pulseLineMirror ? 2 : 1;
+        const isMirrored = fx.pulseLineMirror;
+
+        for (const run of runs) {
+            const { pts, x1, x2 } = run;
+            const grad = makeGrad(Math.min(x1, x2), Math.max(x1, x2));
+            const grad2 = makeGrad(Math.min(x1, x2), Math.max(x1, x2), lineColor2);
+            const gradW = makeGrad(Math.min(x1, x2), Math.max(x1, x2), '#ffffff');
+
+            // Helper: fill between mirrored waves given an array of {x, y} points
+            // topPts are the y values for sign=1, fills to their mirror (cy - (y - cy))
+            const fillMirrored = (topPts) => {
+                if (!isMirrored) return;
+                ctx.beginPath();
+                // Top edge
+                ctx.moveTo(topPts[0].x, topPts[0].y);
+                for (let i = 1; i < topPts.length; i++) {
+                    const prev = topPts[i-1], curr = topPts[i];
+                    ctx.quadraticCurveTo(prev.x, prev.y, (prev.x+curr.x)/2, (prev.y+curr.y)/2);
+                }
+                // Bottom edge (mirrored around cy), reversed
+                for (let i = topPts.length - 1; i >= 0; i--) {
+                    const curr = topPts[i];
+                    const mirY = cy - (curr.y - cy);
+                    if (i === topPts.length - 1) {
+                        ctx.lineTo(curr.x, mirY);
+                    } else {
+                        const next = topPts[i+1];
+                        const mirYn = cy - (next.y - cy);
+                        ctx.quadraticCurveTo(next.x, mirYn, (curr.x+next.x)/2, (mirY+mirYn)/2);
+                    }
+                }
+                ctx.closePath();
+                ctx.fillStyle = lineColor;
+                ctx.globalAlpha = 1;
+                ctx.fill();
+            };
+
+            // Pre-stroke mirror fill (drawn once, style-specific shape)
+            if (isMirrored && fx.pulseLineFill) {
+                if (style === 'smooth' || style === 'ribbon') {
+                    // Bezier curve fill
+                    fillMirrored(pts.map(p => ({ x: p.x, y: cy + p.d })));
+                } else if (style === 'sharp') {
+                    // Triangular peaks fill
+                    const peakStep = Math.max(2, Math.floor(pts.length / 60));
+                    const sharpPts = [{ x: pts[0].x, y: cy }];
+                    for (let i = peakStep; i < pts.length; i += peakStep) {
+                        const pt = pts[i];
+                        const prevPt = pts[Math.max(0, i - peakStep)];
+                        const midX = prevPt.x + (pt.x - prevPt.x) * 0.45;
+                        sharpPts.push({ x: midX, y: cy });
+                        sharpPts.push({ x: midX + (pt.x - prevPt.x) * 0.05, y: cy + pt.d * 2.2 });
+                        sharpPts.push({ x: pt.x, y: cy });
+                    }
+                    fillMirrored(sharpPts);
+                } else if (style === 'sine') {
+                    // Sine wave fill
+                    const sineFreq = 10 + ve * 8;
+                    const sineSpeed = time * 3;
+                    const sineFillPts = pts.map(pt => {
+                        const envelope2 = (10 + Math.abs(pt.d) * 1.2) * intensity;
+                        const sineVal = Math.sin(pt.t * sineFreq - sineSpeed) * envelope2;
+                        let envFade;
+                        if (layout === 'full') { envFade = Math.sin(pt.t * Math.PI); }
+                        else { envFade = Math.pow(1 - pt.t, 0.8); }
+                        return { x: pt.x, y: cy + sineVal * envFade };
+                    });
+                    fillMirrored(sineFillPts);
+                } else if (style === 'noise') {
+                    // Noise uses smooth displacement as fill base (noise is per-frame random, can't match)
+                    fillMirrored(pts.map(p => ({ x: p.x, y: cy + p.d })));
+                }
+            }
+
+            // Draw stroke layers for each mirror pass
+            for (let mirror = 0; mirror < mirrorCount; mirror++) {
+                const sign = mirror === 0 ? 1 : -1;
+                const mirrorAlpha = mirror === 0 ? 1.0 : (isMirrored ? 0.8 : 1.0);
+
+                switch (style) {
+
+                // ============================================================
+                // SMOOTH WAVE
+                // ============================================================
+                case 'smooth': {
+                    drawBezierPath(pts, sign);
+                    // Outer glow
+                    ctx.strokeStyle = grad;
+                    ctx.lineWidth = (lineW + ve * 4) * 3;
+                    ctx.globalAlpha = 0.08 * mirrorAlpha;
+                    ctx.stroke();
+                    // Mid glow
+                    ctx.lineWidth = (lineW + ve * 3) * 1.8;
+                    ctx.globalAlpha = 0.2 * mirrorAlpha * (0.5 + se);
+                    ctx.stroke();
+                    // Core
+                    ctx.lineWidth = lineW + ve * 2;
+                    ctx.globalAlpha = (0.6 + se * 0.4) * mirrorAlpha;
+                    ctx.stroke();
+                    // Hot center
+                    ctx.strokeStyle = gradW;
+                    ctx.lineWidth = Math.max(1, lineW * 0.3);
+                    ctx.globalAlpha = (0.15 + ve * 0.4) * mirrorAlpha;
+                    ctx.stroke();
+                    break;
+                }
+
+                // ============================================================
+                // SHARP PEAKS
+                // ============================================================
+                case 'sharp': {
+                    const peakStep = Math.max(2, Math.floor(pts.length / 60));
+                    ctx.beginPath();
+                    ctx.moveTo(pts[0].x, cy);
+                    for (let i = peakStep; i < pts.length; i += peakStep) {
+                        const pt = pts[i];
+                        const d = pt.d * sign * 2.2;
+                        const prevPt = pts[Math.max(0, i - peakStep)];
+                        const midX = prevPt.x + (pt.x - prevPt.x) * 0.45;
+                        ctx.lineTo(midX, cy);
+                        ctx.lineTo(midX + (pt.x - prevPt.x) * 0.05, cy + d);
+                        ctx.lineTo(pt.x, cy);
+                    }
+                    ctx.strokeStyle = grad;
+                    ctx.lineWidth = (lineW + ve * 2) * 2;
+                    ctx.globalAlpha = 0.12 * mirrorAlpha;
+                    ctx.lineJoin = 'bevel';
+                    ctx.stroke();
+                    ctx.lineWidth = lineW + ve * 1.5;
+                    ctx.globalAlpha = (0.7 + se * 0.3) * mirrorAlpha;
+                    ctx.stroke();
+                    break;
+                }
+
+                // ============================================================
+                // BLOCKS - LED wall spectrum
+                // ============================================================
+                case 'blocks': {
+                    const gap = 2;
+                    const blockW = Math.max(4, Math.floor(12 + ve * 6));
+                    const blockCount = Math.floor(Math.abs(x2 - x1) / (blockW + gap));
+                    for (let i = 0; i < blockCount; i++) {
+                        const t = (i + 0.5) / blockCount;
+                        const ptIdx = Math.floor(t * (pts.length - 1));
+                        const d = Math.abs(pts[ptIdx].d);
+                        const bh = Math.max(2, d * 1.5);
+                        const x = pts[ptIdx].x - blockW / 2;
+                        let envelope;
+                        if (layout === 'full') {
+                            envelope = Math.sin(t * Math.PI);
+                        } else {
+                            envelope = Math.pow(1 - t, 0.6);
+                        }
+                        const alpha = mirrorAlpha * envelope * (0.5 + se * 0.5);
+                        if (alpha < 0.01) continue;
+                        const barGrad = ctx.createLinearGradient(0, cy, 0, cy + bh * sign);
+                        barGrad.addColorStop(0, lineColor);
+                        barGrad.addColorStop(0.6, lineColor2);
+                        barGrad.addColorStop(1, lineColor2 + '44');
+                        ctx.fillStyle = barGrad;
+                        ctx.globalAlpha = alpha;
+                        if (sign > 0) ctx.fillRect(x, cy + 1, blockW, bh);
+                        else ctx.fillRect(x, cy - 1 - bh, blockW, bh);
+                        ctx.fillStyle = '#ffffff';
+                        ctx.globalAlpha = alpha * 0.5;
+                        if (sign > 0) ctx.fillRect(x, cy + bh - 2, blockW, 2);
+                        else ctx.fillRect(x, cy - bh + 1, blockW, 2);
+                    }
+                    break;
+                }
+
+                // ============================================================
+                // DOUBLE HELIX
+                // ============================================================
+                case 'helix': {
+                    const freq1 = 8 + ve * 4;
+                    const speed1 = time * 2.5;
+                    for (let strand = 0; strand < 2; strand++) {
+                        const phase = strand * Math.PI;
+                        ctx.beginPath();
+                        for (let i = 0; i < pts.length; i++) {
+                            const pt = pts[i];
+                            const twist = Math.sin(pt.t * freq1 - speed1 + phase) * (20 + pt.d * 0.7) * intensity;
+                            let envelope;
+                            if (layout === 'full') { envelope = Math.sin(pt.t * Math.PI); }
+                            else { envelope = Math.pow(1 - pt.t, 0.8); }
+                            const y = cy + (pt.d * 0.5 + twist) * sign * envelope;
+                            if (i === 0) ctx.moveTo(pt.x, y);
+                            else {
+                                const prev = pts[i-1];
+                                const prevTwist = Math.sin(prev.t * freq1 - speed1 + phase) * (20 + prev.d * 0.7) * intensity;
+                                let prevEnv;
+                                if (layout === 'full') { prevEnv = Math.sin(prev.t * Math.PI); }
+                                else { prevEnv = Math.pow(1 - prev.t, 0.8); }
+                                const py = cy + (prev.d * 0.5 + prevTwist) * sign * prevEnv;
+                                ctx.quadraticCurveTo(prev.x, py, (prev.x + pt.x) / 2, (py + y) / 2);
+                            }
+                        }
+                        const sc = strand === 0 ? lineColor : lineColor2;
+                        const sg = makeGrad(Math.min(x1,x2), Math.max(x1,x2), sc);
+                        ctx.strokeStyle = sg;
+                        ctx.lineWidth = (lineW + ve * 2) * 2;
+                        ctx.globalAlpha = 0.1 * mirrorAlpha;
+                        ctx.stroke();
+                        ctx.lineWidth = lineW + ve * 1.5;
+                        ctx.globalAlpha = (0.5 + se * 0.4) * mirrorAlpha * (strand === 0 ? 1 : 0.7);
+                        ctx.stroke();
+                    }
+                    break;
+                }
+
+                // ============================================================
+                // SCATTER
+                // ============================================================
+                case 'scatter': {
+                    const dotStep = Math.max(1, Math.floor(pts.length / 120));
+                    for (let i = dotStep; i < pts.length; i += dotStep) {
+                        const pt = pts[i];
+                        const d = pt.d * sign;
+                        let envelope;
+                        if (layout === 'full') { envelope = Math.sin(pt.t * Math.PI); }
+                        else { envelope = Math.pow(1 - pt.t, 0.7); }
+                        const alpha = mirrorAlpha * envelope * (0.4 + se * 0.6);
+                        if (alpha < 0.01) continue;
+                        const jx = (Math.random() - 0.5) * 6 * ve;
+                        const jy = (Math.random() - 0.5) * 6 * ve;
+                        const size = (1.5 + Math.abs(d) * 0.08) * lineW * 0.6;
+                        ctx.beginPath();
+                        ctx.arc(pt.x + jx, cy + d + jy, Math.max(0.8, size), 0, Math.PI * 2);
+                        ctx.fillStyle = lineColor;
+                        ctx.globalAlpha = alpha;
+                        ctx.fill();
+                        ctx.beginPath();
+                        ctx.arc(pt.x + jx, cy + d + jy, size * 2.5, 0, Math.PI * 2);
+                        ctx.fillStyle = lineColor;
+                        ctx.globalAlpha = alpha * 0.12;
+                        ctx.fill();
+                    }
+                    drawBezierPath(pts, sign);
+                    ctx.strokeStyle = grad;
+                    ctx.lineWidth = 0.5;
+                    ctx.globalAlpha = 0.15 * mirrorAlpha * se;
+                    ctx.stroke();
+                    break;
+                }
+
+                // ============================================================
+                // RIBBON
+                // ============================================================
+                case 'ribbon': {
+                    ctx.beginPath();
+                    ctx.moveTo(pts[0].x, cy);
+                    for (let i = 1; i < pts.length; i++) {
+                        const prev = pts[i-1], curr = pts[i];
+                        ctx.quadraticCurveTo(prev.x, cy + prev.d * sign, (prev.x+curr.x)/2, cy + (prev.d+curr.d)/2 * sign);
+                    }
+                    const last = pts[pts.length - 1];
+                    ctx.lineTo(last.x, cy + last.d * sign);
+                    ctx.lineTo(last.x, cy);
+                    ctx.closePath();
+                    const maxD = Math.max(30, 60 * intensity * ve);
+                    const ribbonGrad = ctx.createLinearGradient(0, cy, 0, cy + maxD * sign);
+                    ribbonGrad.addColorStop(0, lineColor + '05');
+                    ribbonGrad.addColorStop(0.3, lineColor + '30');
+                    ribbonGrad.addColorStop(0.7, lineColor2 + '20');
+                    ribbonGrad.addColorStop(1, lineColor2 + '00');
+                    ctx.fillStyle = ribbonGrad;
+                    ctx.globalAlpha = (0.5 + se * 0.5) * mirrorAlpha;
+                    ctx.fill();
+                    drawBezierPath(pts, sign);
+                    ctx.strokeStyle = grad;
+                    ctx.lineWidth = lineW + ve * 1.5;
+                    ctx.globalAlpha = (0.7 + se * 0.3) * mirrorAlpha;
+                    ctx.stroke();
+                    ctx.strokeStyle = gradW;
+                    ctx.lineWidth = Math.max(0.5, lineW * 0.25);
+                    ctx.globalAlpha = (0.1 + ve * 0.3) * mirrorAlpha;
+                    ctx.stroke();
+                    break;
+                }
+
+                // ============================================================
+                // SEGMENTS
+                // ============================================================
+                case 'segments': {
+                    const segLen = 20 + ve * 15;
+                    const gapLen = 8 + (1 - ve) * 20;
+                    let drawing = true, accumulated = 0;
+                    const segs = [];
+                    let currSeg = [];
+                    for (let i = 0; i < pts.length; i++) {
+                        accumulated += segStep;
+                        if (drawing) {
+                            currSeg.push({ x: pts[i].x, y: cy + pts[i].d * sign, t: pts[i].t });
+                            if (accumulated > segLen) { segs.push(currSeg); currSeg = []; accumulated = 0; drawing = false; }
+                        } else {
+                            if (accumulated > gapLen) { accumulated = 0; drawing = true; }
+                        }
+                    }
+                    if (currSeg.length > 1) segs.push(currSeg);
+                    for (const seg of segs) {
+                        if (seg.length < 2) continue;
+                        const avgT = seg[Math.floor(seg.length/2)].t;
+                        let envelope;
+                        if (layout === 'full') { envelope = Math.sin(avgT * Math.PI); }
+                        else { envelope = Math.pow(1 - avgT, 0.7); }
+                        ctx.beginPath();
+                        ctx.moveTo(seg[0].x, seg[0].y);
+                        for (let j = 1; j < seg.length; j++) {
+                            const prev = seg[j-1], curr = seg[j];
+                            ctx.quadraticCurveTo(prev.x, prev.y, (prev.x+curr.x)/2, (prev.y+curr.y)/2);
+                        }
+                        ctx.strokeStyle = lineColor;
+                        ctx.lineWidth = (lineW + ve * 2) * 2.5;
+                        ctx.globalAlpha = 0.08 * mirrorAlpha * envelope;
+                        ctx.lineCap = 'round';
+                        ctx.stroke();
+                        ctx.lineWidth = lineW + ve * 2;
+                        ctx.globalAlpha = (0.6 + se * 0.4) * mirrorAlpha * envelope;
+                        ctx.stroke();
+                        const r = lineW * 0.8 + ve;
+                        ctx.fillStyle = '#ffffff';
+                        ctx.globalAlpha = (0.3 + ve * 0.4) * mirrorAlpha * envelope;
+                        ctx.beginPath(); ctx.arc(seg[0].x, seg[0].y, r, 0, Math.PI*2); ctx.fill();
+                        ctx.beginPath(); ctx.arc(seg[seg.length-1].x, seg[seg.length-1].y, r, 0, Math.PI*2); ctx.fill();
+                    }
+                    break;
+                }
+
+                // ============================================================
+                // SINE PULSE
+                // ============================================================
+                case 'sine': {
+                    const sineFreq = 10 + ve * 8;
+                    const sineSpeed = time * 3;
+                    const sinePts = [];
+                    for (let i = 0; i < pts.length; i++) {
+                        const pt = pts[i];
+                        const envelope2 = (10 + Math.abs(pt.d) * 1.2) * intensity;
+                        const sineVal = Math.sin(pt.t * sineFreq - sineSpeed) * envelope2;
+                        let envFade;
+                        if (layout === 'full') { envFade = Math.sin(pt.t * Math.PI); }
+                        else { envFade = Math.pow(1 - pt.t, 0.8); }
+                        let rippleD = 0;
+                        for (const ripple of STATE.pulseLineRipples) {
+                            const dist = Math.abs(pt.t - ripple.pos);
+                            if (dist < ripple.width) {
+                                rippleD += Math.cos((dist / ripple.width) * Math.PI) * 0.5 * ripple.amplitude * ripple.alpha;
+                            }
+                        }
+                        sinePts.push({ x: pt.x, y: cy + (sineVal + rippleD) * sign * envFade });
+                    }
+                    ctx.beginPath();
+                    ctx.moveTo(sinePts[0].x, sinePts[0].y);
+                    for (let i = 1; i < sinePts.length; i++) {
+                        const prev = sinePts[i-1], curr = sinePts[i];
+                        ctx.quadraticCurveTo(prev.x, prev.y, (prev.x+curr.x)/2, (prev.y+curr.y)/2);
+                    }
+                    ctx.strokeStyle = grad;
+                    ctx.lineWidth = (lineW + ve * 3) * 2;
+                    ctx.globalAlpha = 0.1 * mirrorAlpha;
+                    ctx.stroke();
+                    ctx.lineWidth = lineW + ve * 2;
+                    ctx.globalAlpha = (0.6 + se * 0.4) * mirrorAlpha;
+                    ctx.stroke();
+                    ctx.strokeStyle = gradW;
+                    ctx.lineWidth = Math.max(0.5, lineW * 0.3);
+                    ctx.globalAlpha = (0.2 + ve * 0.5) * mirrorAlpha;
+                    ctx.stroke();
+                    break;
+                }
+
+                // ============================================================
+                // NOISE
+                // ============================================================
+                case 'noise': {
+                    for (let pass = 0; pass < 3; pass++) {
+                        const spread = [0.3, 0.7, 1.2][pass];
+                        const alphaM = [0.5, 0.3, 0.12][pass];
+                        const widthM = [1, 1.5, 3][pass];
+                        ctx.beginPath();
+                        ctx.moveTo(pts[0].x, cy);
+                        for (let i = 1; i < pts.length; i++) {
+                            const pt = pts[i];
+                            const noise = (Math.random() - 0.5) * 2;
+                            let envFade;
+                            if (layout === 'full') { envFade = Math.sin(pt.t * Math.PI); }
+                            else { envFade = Math.pow(1 - pt.t, 0.7); }
+                            const disp = (pt.d * 0.3 + noise * (8 + Math.abs(pt.d) * spread) * intensity) * sign * envFade;
+                            ctx.lineTo(pt.x, cy + disp);
+                        }
+                        ctx.strokeStyle = pass === 0 ? grad : grad2;
+                        ctx.lineWidth = (lineW + ve) * widthM;
+                        ctx.globalAlpha = alphaM * mirrorAlpha * (0.4 + se * 0.6);
+                        ctx.stroke();
+                    }
+                    break;
+                }
+
+                // ============================================================
+                // HEARTBEAT - audio-reactive EKG
+                // ============================================================
+                case 'heartbeat': {
+                    const beatSpacing = 80 + (1 - ve) * 60;
+                    ctx.beginPath();
+                    let px = 0;
+                    for (let i = 0; i < pts.length; i++) {
+                        const pt = pts[i];
+                        px += segStep;
+                        let envFade;
+                        if (layout === 'full') { envFade = Math.sin(pt.t * Math.PI); }
+                        else { envFade = Math.pow(1 - pt.t, 0.7); }
+                        const phase = px % beatSpacing;
+                        const norm = phase / beatSpacing;
+                        // Audio-driven amplitude: use actual displacement
+                        const amp = (40 + Math.abs(pt.d) * 2) * intensity;
+                        let y = cy;
+
+                        if (norm < 0.1) {
+                            y = cy;
+                        } else if (norm < 0.15) {
+                            const pv = (norm - 0.1) / 0.05;
+                            y = cy - Math.sin(pv * Math.PI) * amp * 0.08 * sign * envFade;
+                        } else if (norm < 0.2) {
+                            y = cy;
+                        } else if (norm < 0.23) {
+                            const q = (norm - 0.2) / 0.03;
+                            y = cy + Math.sin(q * Math.PI) * amp * 0.12 * sign * envFade;
+                        } else if (norm < 0.3) {
+                            const r = (norm - 0.23) / 0.07;
+                            y = cy - Math.sin(r * Math.PI) * amp * sign * envFade;
+                        } else if (norm < 0.35) {
+                            const s = (norm - 0.3) / 0.05;
+                            y = cy + Math.sin(s * Math.PI) * amp * 0.25 * sign * envFade;
+                        } else if (norm < 0.45) {
+                            y = cy;
+                        } else if (norm < 0.55) {
+                            const tw = (norm - 0.45) / 0.1;
+                            y = cy - Math.sin(tw * Math.PI) * amp * 0.15 * sign * envFade;
+                        } else {
+                            y = cy;
+                        }
+
+                        for (const ripple of STATE.pulseLineRipples) {
+                            const dist = Math.abs(pt.t - ripple.pos);
+                            if (dist < ripple.width) {
+                                y += Math.cos((dist / ripple.width) * Math.PI) * 0.5 * ripple.amplitude * ripple.alpha * sign;
+                            }
+                        }
+
+                        if (i === 0) ctx.moveTo(pt.x, y);
+                        else ctx.lineTo(pt.x, y);
+                    }
+                    // Glow
+                    ctx.strokeStyle = grad;
+                    ctx.lineWidth = (lineW + ve * 2) * 2.5;
+                    ctx.globalAlpha = 0.1 * mirrorAlpha;
+                    ctx.lineJoin = 'round';
+                    ctx.stroke();
+                    // Core
+                    ctx.lineWidth = lineW + ve * 1.5;
+                    ctx.globalAlpha = (0.7 + se * 0.3) * mirrorAlpha;
+                    ctx.stroke();
+                    // Hot line
+                    ctx.strokeStyle = gradW;
+                    ctx.lineWidth = Math.max(0.5, lineW * 0.2);
+                    ctx.globalAlpha = (0.15 + ve * 0.35) * mirrorAlpha;
+                    ctx.stroke();
+                    break;
+                }
+
+                default: break;
+                } // end switch
+            } // end mirror loop
+        } // end runs loop
+
+        ctx.globalAlpha = 1;
+        ctx.shadowBlur = 0;
+        ctx.restore();
+
+        // Update ripples
+        for (let i = STATE.pulseLineRipples.length - 1; i >= 0; i--) {
+            const r = STATE.pulseLineRipples[i];
+            r.pos += r.speed;
+            r.alpha *= 0.97;
+            r.amplitude *= 0.98;
+            if (r.pos > 1.2 || r.alpha < 0.01) {
+                STATE.pulseLineRipples.splice(i, 1);
+            }
+        }
     }
 
     // --- VIGNETTE ---

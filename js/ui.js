@@ -4,15 +4,17 @@
 
 const UI = {
     init() {
-        // Mode grid
+        // Mode grid (optional, may not exist in simplified sidebar)
         const mg = document.getElementById('mode-grid');
-        MODE_NAMES.forEach((name, i) => {
-            const btn = document.createElement('div');
-            btn.className = 'mode-btn' + (i===0?' active':'');
-            btn.textContent = name;
-            btn.onclick = () => { STATE.mode = i; this.updateMode(); };
-            mg.appendChild(btn);
-        });
+        if (mg) {
+            MODE_NAMES.forEach((name, i) => {
+                const btn = document.createElement('div');
+                btn.className = 'mode-btn' + (i===0?' active':'');
+                btn.textContent = name;
+                btn.onclick = () => { STATE.mode = i; this.updateMode(); };
+                mg.appendChild(btn);
+            });
+        }
 
         // Bind events
         document.getElementById('btn-upload').onclick = () => document.getElementById('file-input').click();
@@ -65,11 +67,12 @@ const UI = {
         const fxLink = (id, key, type) => {
             const el = document.getElementById(id); if (!el) return;
             el.oninput = el.onchange = e => {
-                CONFIG.fx[key] = type==='bool' ? e.target.checked : type==='int' ? parseInt(e.target.value) : parseFloat(e.target.value);
+                CONFIG.fx[key] = type==='bool' ? e.target.checked : type==='int' ? parseInt(e.target.value) : type==='str' ? e.target.value : parseFloat(e.target.value);
                 this.saveToStorage();
             };
             if (el.type === 'range') syncNum(el);
         };
+        fxLink('s-fx-show-shape', 'showShape', 'bool');
         fxLink('s-fx-show-bars', 'showBars', 'bool');
         fxLink('s-fx-rotate', 'rotate', 'bool');
         fxLink('s-fx-rotate-speed', 'rotateSpeed', 'float');
@@ -84,10 +87,32 @@ const UI = {
         fxLink('s-fx-rounded-bars', 'roundedBars', 'bool');
         fxLink('s-fx-vignette', 'vignette', 'bool');
         fxLink('s-fx-bg-pulse', 'bgPulse', 'bool');
+        fxLink('s-fx-pulse-lines', 'pulseLines', 'bool');
+        fxLink('s-fx-pulse-line-style', 'pulseLineStyle', 'str');
+        fxLink('s-fx-pulse-line-layout', 'pulseLineLayout', 'str');
+        fxLink('s-fx-pulse-line-width', 'pulseLineWidth', 'float');
+        fxLink('s-fx-pulse-line-intensity', 'pulseLineIntensity', 'float');
+        fxLink('s-fx-pulse-line-mirror', 'pulseLineMirror', 'bool');
+        fxLink('s-fx-pulse-line-fill', 'pulseLineFill', 'bool');
+        fxLink('s-fx-pulse-line-sensitivity', 'pulseLineSensitivity', 'float');
+        fxLink('s-fx-pulse-line-smoothing', 'pulseLineSmoothing', 'float');
+
+        // Pulse line color picker
+        const plColorInput = document.getElementById('s-fx-pulse-line-color');
+        const plAutoToggle = document.getElementById('s-fx-pulse-line-color-auto');
+        plAutoToggle.onchange = () => {
+            CONFIG.fx.pulseLineColor = plAutoToggle.checked ? null : plColorInput.value;
+            this.saveToStorage();
+        };
+        plColorInput.oninput = () => {
+            if (!plAutoToggle.checked) CONFIG.fx.pulseLineColor = plColorInput.value;
+            this.saveToStorage();
+        };
 
         // --- Shape grid ---
         const shapeGrid = document.getElementById('shape-grid');
         const svgFileInput = document.getElementById('svg-file-input');
+        if (!shapeGrid || !svgFileInput) { console.warn('Shape grid elements missing'); }
 
         // Helper: select a shape and highlight it
         const selectShape = (key) => {
@@ -318,7 +343,8 @@ const UI = {
     },
     toast(msg) {
         const t = document.createElement('div'); t.className='toast'; t.textContent=msg;
-        document.getElementById('toast-container').appendChild(t);
+        const container = document.getElementById('toast-container');
+        if (container) container.appendChild(t);
         setTimeout(() => t.remove(), 3000);
     },
     loadSvgShape(svgData) {
@@ -431,6 +457,7 @@ const UI = {
         setVal('vol-slider', 0.8);
 
         // FX fields
+        setVal('s-fx-show-shape', CONFIG.fx.showShape);
         setVal('s-fx-show-bars', CONFIG.fx.showBars);
         setVal('s-fx-rotate', CONFIG.fx.rotate);
         setVal('s-fx-rotate-speed', CONFIG.fx.rotateSpeed);
@@ -445,6 +472,17 @@ const UI = {
         setVal('s-fx-rounded-bars', CONFIG.fx.roundedBars);
         setVal('s-fx-vignette', CONFIG.fx.vignette);
         setVal('s-fx-bg-pulse', CONFIG.fx.bgPulse);
+        setVal('s-fx-pulse-lines', CONFIG.fx.pulseLines);
+        setVal('s-fx-pulse-line-style', CONFIG.fx.pulseLineStyle);
+        setVal('s-fx-pulse-line-layout', CONFIG.fx.pulseLineLayout);
+        setVal('s-fx-pulse-line-width', CONFIG.fx.pulseLineWidth);
+        setVal('s-fx-pulse-line-intensity', CONFIG.fx.pulseLineIntensity);
+        setVal('s-fx-pulse-line-color', CONFIG.fx.pulseLineColor || '#1866ee');
+        setVal('s-fx-pulse-line-color-auto', CONFIG.fx.pulseLineColor === null);
+        setVal('s-fx-pulse-line-mirror', CONFIG.fx.pulseLineMirror);
+        setVal('s-fx-pulse-line-fill', CONFIG.fx.pulseLineFill);
+        setVal('s-fx-pulse-line-sensitivity', CONFIG.fx.pulseLineSensitivity);
+        setVal('s-fx-pulse-line-smoothing', CONFIG.fx.pulseLineSmoothing);
 
         // Shape grid selection
         const shapeGrid = document.getElementById('shape-grid');
@@ -481,8 +519,13 @@ const UI = {
             const raw = localStorage.getItem('twill9000_settings');
             if (raw) {
                 const data = JSON.parse(raw);
+                // Version check: if config structure changed, discard stale data
+                if (!data.fx || typeof data.fx.pulseLineLayout === 'undefined') {
+                    localStorage.removeItem('twill9000_settings');
+                    return;
+                }
                 this.applyConfig(data);
             }
-        } catch(e) { /* silent fail */ }
+        } catch(e) { localStorage.removeItem('twill9000_settings'); }
     }
 };

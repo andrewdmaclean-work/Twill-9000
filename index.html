@@ -33,46 +33,96 @@
         </div>
 
         <div class="section">
-            <h3>Mode</h3>
-            <div class="mode-grid" id="mode-grid"></div>
+            <h3>Center Shape</h3>
+            <div class="row"><label>Show Shape</label><label class="toggle"><input type="checkbox" id="s-fx-show-shape" checked><span></span></label></div>
+            <div class="row"><label>Show Bars</label><label class="toggle"><input type="checkbox" id="s-fx-show-bars" checked><span></span></label></div>
+            <div class="shape-label">Shape</div>
+            <div class="shape-grid" id="shape-grid"></div>
+            <div class="btn-row">
+                <button class="btn" id="btn-shape-random">Random</button>
+                <button class="btn" id="btn-shape-upload">Upload SVG</button>
+            </div>
+            <div class="row"><label>Shape Speed</label><input type="range" id="s-shape-speed" min="0.1" max="5" step="0.1" value="1"><input type="number" id="s-shape-speed-num" min="0.1" max="5" step="0.1" value="1"></div>
+            <div class="row"><label>Change Point</label><input type="range" id="s-shape-change-point" min="0.05" max="0.6" step="0.01" value="0.3"><input type="number" id="s-shape-change-point-num" min="0.05" max="0.6" step="0.01" value="0.3"></div>
+            <input type="file" id="svg-file-input" accept=".svg" style="display:none;">
+            <div class="shape-label" style="margin-top:8px;">Colors</div>
+            <div class="color-row">
+                <label>Fill</label>
+                <input type="color" id="s-shape-fill-color" value="#ef213a">
+                <label class="toggle"><input type="checkbox" id="s-shape-fill-auto"><span></span></label>
+                <label style="font-size:10px;color:var(--dim)">Auto</label>
+            </div>
+            <div class="color-row">
+                <label>Border</label>
+                <input type="color" id="s-shape-stroke-color" value="#1866ee">
+                <label class="toggle"><input type="checkbox" id="s-shape-stroke-auto"><span></span></label>
+                <label style="font-size:10px;color:var(--dim)">Auto</label>
+            </div>
+            <div class="row"><label>Ring Separation</label><input type="range" id="s-ring-separation" min="0" max="1" step="0.05" value="0.5"><input type="number" id="s-ring-separation-num" min="0" max="1" step="0.05" value="0.5"></div>
+            <div class="row"><label>Hollow</label><label class="toggle"><input type="checkbox" id="s-hollow"><span></span></label></div>
+            <div class="row"><label>Bar Style</label>
+                <select id="s-bar-style">
+                    <option value="bars">Bars</option>
+                    <option value="mirror">Mirror</option>
+                </select>
+            </div>
+            <div class="row"><label>Bar Count</label><input type="range" id="s-radial-bars" min="6" max="180" step="2" value="90"><input type="number" id="s-radial-bars-num" min="6" max="180" step="2" value="90"></div>
+            <div class="row"><label>Inner Radius</label><input type="range" id="s-radial-radius" min="0.1" max="0.5" step="0.05" value="0.25"><input type="number" id="s-radial-radius-num" min="0.1" max="0.5" step="0.05" value="0.25"></div>
+            <div class="row"><label>Gradient Bars</label><label class="toggle"><input type="checkbox" id="s-fx-gradient-bars"><span></span></label></div>
+            <div class="row"><label>Bar Width</label><input type="range" id="s-fx-bar-width" min="1" max="30" step="1" value="4"><input type="number" id="s-fx-bar-width-num" min="1" max="30" step="1" value="4"></div>
+            <div class="row"><label>Rounded Bars</label><label class="toggle"><input type="checkbox" id="s-fx-rounded-bars"><span></span></label></div>
+            <div class="row"><label>Rotate</label><label class="toggle"><input type="checkbox" id="s-fx-rotate"><span></span></label></div>
+            <div class="row"><label>Rotate Speed</label><input type="range" id="s-fx-rotate-speed" min="0.05" max="2.0" step="0.05" value="0.3"><input type="number" id="s-fx-rotate-speed-num" min="0.05" max="2.0" step="0.05" value="0.3"></div>
+            <div class="row"><label>Pulse Rings</label><label class="toggle"><input type="checkbox" id="s-fx-pulse-rings"><span></span></label></div>
+            <div class="row"><label>Particles</label><label class="toggle"><input type="checkbox" id="s-fx-particles"><span></span></label></div>
         </div>
 
-        <div class="section" id="mode-settings-section">
-            <h3>Mode Settings</h3>
-            <div class="mode-settings active" data-mode="0">
-                <div class="row"><label>Bar Count</label><input type="range" id="s-radial-bars" min="6" max="180" step="2" value="90"><input type="number" id="s-radial-bars-num" min="6" max="180" step="2" value="90"></div>
-                <div class="row"><label>Inner Radius</label><input type="range" id="s-radial-radius" min="0.1" max="0.5" step="0.05" value="0.25"><input type="number" id="s-radial-radius-num" min="0.1" max="0.5" step="0.05" value="0.25"></div>
-                <div class="shape-label">Center Shape</div>
-                <div class="shape-grid" id="shape-grid"></div>
-                <div class="btn-row">
-                    <button class="btn" id="btn-shape-random">Random</button>
-                    <button class="btn" id="btn-shape-upload">Upload SVG</button>
-                </div>
-                <div class="row"><label>Shape Speed</label><input type="range" id="s-shape-speed" min="0.1" max="5" step="0.1" value="1"><input type="number" id="s-shape-speed-num" min="0.1" max="5" step="0.1" value="1"></div>
-                <div class="row"><label>Change Point</label><input type="range" id="s-shape-change-point" min="0.05" max="0.6" step="0.01" value="0.3"><input type="number" id="s-shape-change-point-num" min="0.05" max="0.6" step="0.01" value="0.3"></div>
-                <input type="file" id="svg-file-input" accept=".svg" style="display:none;">
-                <div class="shape-label" style="margin-top:8px;">Shape Colors</div>
-                <div class="color-row">
-                    <label>Fill</label>
-                    <input type="color" id="s-shape-fill-color" value="#ef213a">
-                    <label class="toggle"><input type="checkbox" id="s-shape-fill-auto"><span></span></label>
-                    <label style="font-size:10px;color:var(--dim)">Auto</label>
-                </div>
-                <div class="color-row">
-                    <label>Border</label>
-                    <input type="color" id="s-shape-stroke-color" value="#1866ee">
-                    <label class="toggle"><input type="checkbox" id="s-shape-stroke-auto"><span></span></label>
-                    <label style="font-size:10px;color:var(--dim)">Auto</label>
-                </div>
-                <div class="row"><label>Ring Separation</label><input type="range" id="s-ring-separation" min="0" max="1" step="0.05" value="0.5"><input type="number" id="s-ring-separation-num" min="0" max="1" step="0.05" value="0.5"></div>
-                <div class="row"><label>Hollow</label><label class="toggle"><input type="checkbox" id="s-hollow"><span></span></label></div>
-                <div class="row"><label>Bar Style</label>
-                    <select id="s-bar-style">
-                        <option value="bars">Bars</option>
-                        <option value="mirror">Mirror</option>
-                    </select>
-                </div>
+        <div class="section">
+            <h3>Pulse Lines</h3>
+            <div class="row"><label>Enabled</label><label class="toggle"><input type="checkbox" id="s-fx-pulse-lines" checked><span></span></label></div>
+            <div class="row"><label>Style</label>
+                <select id="s-fx-pulse-line-style">
+                    <option value="smooth">Smooth Wave</option>
+                    <option value="sharp">Sharp Peaks</option>
+                    <option value="blocks">Blocks</option>
+                    <option value="helix">Double Helix</option>
+                    <option value="scatter">Scatter</option>
+                    <option value="ribbon">Ribbon</option>
+                    <option value="segments">Segments</option>
+                    <option value="sine">Sine Pulse</option>
+                    <option value="noise">Noise</option>
+                    <option value="heartbeat">Heartbeat</option>
+                </select>
             </div>
+            <div class="row"><label>Layout</label>
+                <select id="s-fx-pulse-line-layout">
+                    <option value="center">Center Out</option>
+                    <option value="full">Full Width</option>
+                </select>
+            </div>
+            <div class="row"><label>Width</label><input type="range" id="s-fx-pulse-line-width" min="1" max="6" step="0.5" value="2"><input type="number" id="s-fx-pulse-line-width-num" min="1" max="6" step="0.5" value="2"></div>
+            <div class="row"><label>Intensity</label><input type="range" id="s-fx-pulse-line-intensity" min="0.1" max="2" step="0.1" value="0.8"><input type="number" id="s-fx-pulse-line-intensity-num" min="0.1" max="2" step="0.1" value="0.8"></div>
+            <div class="color-row">
+                <label>Color</label>
+                <input type="color" id="s-fx-pulse-line-color" value="#1866ee">
+                <label class="toggle"><input type="checkbox" id="s-fx-pulse-line-color-auto" checked><span></span></label>
+                <label style="font-size:10px;color:var(--dim)">Auto</label>
+            </div>
+            <div class="row"><label>Mirror</label><label class="toggle"><input type="checkbox" id="s-fx-pulse-line-mirror" checked><span></span></label></div>
+            <div class="row"><label>Fill</label><label class="toggle"><input type="checkbox" id="s-fx-pulse-line-fill" checked><span></span></label></div>
+            <div class="shape-label" style="margin-top:8px;">Line Audio</div>
+            <div class="row"><label>Sensitivity</label><input type="range" id="s-fx-pulse-line-sensitivity" min="0.1" max="4.0" step="0.1" value="1.5"><input type="number" id="s-fx-pulse-line-sensitivity-num" min="0.1" max="4.0" step="0.1" value="1.5"></div>
+            <div class="row"><label>Smoothing</label><input type="range" id="s-fx-pulse-line-smoothing" min="0.5" max="0.98" step="0.01" value="0.85"><input type="number" id="s-fx-pulse-line-smoothing-num" min="0.5" max="0.98" step="0.01" value="0.85"></div>
+        </div>
+
+        <div class="section">
+            <h3>Global FX</h3>
+            <div class="row"><label>Glow</label><label class="toggle"><input type="checkbox" id="s-fx-glow"><span></span></label></div>
+            <div class="row"><label>Glow Strength</label><input type="range" id="s-fx-glow-strength" min="5" max="60" step="1" value="20"><input type="number" id="s-fx-glow-strength-num" min="5" max="60" step="1" value="20"></div>
+            <div class="row"><label>Motion Trails</label><label class="toggle"><input type="checkbox" id="s-fx-trails"><span></span></label></div>
+            <div class="row"><label>Trail Fade</label><input type="range" id="s-fx-trail-alpha" min="0.02" max="0.4" step="0.01" value="0.12"><input type="number" id="s-fx-trail-alpha-num" min="0.02" max="0.4" step="0.01" value="0.12"></div>
+            <div class="row"><label>Vignette</label><label class="toggle"><input type="checkbox" id="s-fx-vignette"><span></span></label></div>
+            <div class="row"><label>BG Pulse</label><label class="toggle"><input type="checkbox" id="s-fx-bg-pulse"><span></span></label></div>
         </div>
 
         <div class="section">
@@ -84,25 +134,7 @@
         </div>
 
         <div class="section">
-            <h3>Visual FX</h3>
-            <div class="row"><label>Show Bars</label><label class="toggle"><input type="checkbox" id="s-fx-show-bars" checked><span></span></label></div>
-            <div class="row"><label>Rotate</label><label class="toggle"><input type="checkbox" id="s-fx-rotate"><span></span></label></div>
-            <div class="row"><label>Rotate Speed</label><input type="range" id="s-fx-rotate-speed" min="0.05" max="2.0" step="0.05" value="0.3"><input type="number" id="s-fx-rotate-speed-num" min="0.05" max="2.0" step="0.05" value="0.3"></div>
-            <div class="row"><label>Glow</label><label class="toggle"><input type="checkbox" id="s-fx-glow"><span></span></label></div>
-            <div class="row"><label>Glow Strength</label><input type="range" id="s-fx-glow-strength" min="5" max="60" step="1" value="20"><input type="number" id="s-fx-glow-strength-num" min="5" max="60" step="1" value="20"></div>
-            <div class="row"><label>Motion Trails</label><label class="toggle"><input type="checkbox" id="s-fx-trails"><span></span></label></div>
-            <div class="row"><label>Trail Fade</label><input type="range" id="s-fx-trail-alpha" min="0.02" max="0.4" step="0.01" value="0.12"><input type="number" id="s-fx-trail-alpha-num" min="0.02" max="0.4" step="0.01" value="0.12"></div>
-            <div class="row"><label>Pulse Rings</label><label class="toggle"><input type="checkbox" id="s-fx-pulse-rings"><span></span></label></div>
-            <div class="row"><label>Particles</label><label class="toggle"><input type="checkbox" id="s-fx-particles"><span></span></label></div>
-            <div class="row"><label>Gradient Bars</label><label class="toggle"><input type="checkbox" id="s-fx-gradient-bars"><span></span></label></div>
-            <div class="row"><label>Bar Width</label><input type="range" id="s-fx-bar-width" min="1" max="30" step="1" value="4"><input type="number" id="s-fx-bar-width-num" min="1" max="30" step="1" value="4"></div>
-            <div class="row"><label>Rounded Bars</label><label class="toggle"><input type="checkbox" id="s-fx-rounded-bars"><span></span></label></div>
-            <div class="row"><label>Vignette</label><label class="toggle"><input type="checkbox" id="s-fx-vignette"><span></span></label></div>
-            <div class="row"><label>BG Pulse</label><label class="toggle"><input type="checkbox" id="s-fx-bg-pulse"><span></span></label></div>
-        </div>
-
-        <div class="section">
-            <h3>Voice / Audio</h3>
+            <h3>Audio Analysis</h3>
             <div class="row"><label>Voice Mode</label><label class="toggle"><input type="checkbox" id="s-voice-mode" checked><span></span></label></div>
             <div class="row"><label>Sensitivity</label><input type="range" id="s-sensitivity" min="0.1" max="4.0" step="0.1" value="1.5"><input type="number" id="s-sensitivity-num" min="0.1" max="4.0" step="0.1" value="1.5"></div>
             <div class="row"><label>Smoothing</label><input type="range" id="s-smoothing" min="0.5" max="0.98" step="0.01" value="0.92"><input type="number" id="s-smoothing-num" min="0.5" max="0.98" step="0.01" value="0.92"></div>

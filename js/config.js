@@ -78,13 +78,25 @@ const CONFIG = {
         barWidth: 4,
         roundedBars: false,
         vignette: false,
-        bgPulse: false
+        bgPulse: false,
+        pulseLines: true,
+        pulseLineWidth: 2,
+        pulseLineIntensity: 0.8,
+        pulseLineStyle: 'smooth',  // smooth, sharp, blocks, helix, scatter, ribbon, segments, sine, noise, heartbeat
+        pulseLineLayout: 'center', // center = from shape outward, full = edge to edge
+        pulseLineColor: null,      // null = match stroke/outline color, or hex string
+        pulseLineMirror: true,    // mirror the line above and below center
+        pulseLineFill: true,      // fill the area between mirrored waves
+        pulseLineSensitivity: 1.5, // independent sensitivity for lines
+        pulseLineSmoothing: 0.85,  // independent smoothing for lines
+        showShape: true
     }
 };
 
 const STATE = {
     mode: 0, playing: false, recording: false,
     voiceEnergy: 0, voiceActive: false, isEmphasis: false,
+    lineEnergy: 0,  // independently smoothed energy for pulse lines
     emphasisTimer: 0, emphasisHistory: [],
     // export
     pngFrames: [], jsonFrames: [], recordingPng: false, recordingJson: false,
@@ -102,7 +114,9 @@ const STATE = {
     lastVoiceEnergy: 0,            // previous frame's voice energy for detecting downswing    customSvgPath: null,           // Path2D from uploaded SVG
     customSvgScale: 1,             // scale factor for custom SVG to fit radius
     // SVG edge distance cache (normalized, recomputed on shape change)
-    svgEdgeCache: { shapeKey: null, bars: 0, distances: null }
+    svgEdgeCache: { shapeKey: null, bars: 0, distances: null },
+    // Pulse line ripples: waves that propagate outward from center on emphasis
+    pulseLineRipples: []
 };
 
 const MODE_NAMES = ['Radial EQ'];

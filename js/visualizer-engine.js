@@ -700,17 +700,19 @@ class Visualizer {
                     }
                     fillMirrored(sharpPts);
                 } else if (style === 'sine') {
-                    // Sine wave fill
-                    const sineFreq = 10 + ve * 8;
-                    const sineSpeed = time * 3;
-                    const sineFillPts = pts.map(pt => {
-                        const envelope2 = (10 + Math.abs(pt.d) * 1.2) * intensity;
-                        const sineVal = Math.sin(pt.t * sineFreq - sineSpeed) * envelope2;
+                    // Clean sine fill matching stroke
+                    const sineFillFreq = 12 + ve * 6;
+                    const sineFillSpeed = time * 3;
+                    const sineFillAmp = (20 + ve * 120 + se * 60) * intensity;
+                    const sineFillStep = Math.max(1, Math.floor(pts.length / 200));
+                    const sineFillPts = [];
+                    for (let i = 0; i < pts.length; i += sineFillStep) {
+                        const pt = pts[i];
                         let envFade;
                         if (layout === 'full') { envFade = Math.sin(pt.t * Math.PI); }
                         else { envFade = Math.pow(1 - pt.t, 0.8); }
-                        return { x: pt.x, y: cy + sineVal * envFade };
-                    });
+                        sineFillPts.push({ x: pt.x, y: cy + Math.sin(pt.t * sineFillFreq - sineFillSpeed) * sineFillAmp * envFade });
+                    }
                     fillMirrored(sineFillPts);
                 } else if (style === 'noise') {
                     // Noise uses smooth displacement as fill base (noise is per-frame random, can't match)
@@ -977,16 +979,21 @@ class Visualizer {
                 // SINE PULSE
                 // ============================================================
                 case 'sine': {
-                    const sineFreq = 10 + ve * 8;
+                    // Clean oscilloscope: audio drives amplitude, not per-point noise
+                    const sineFreq = 12 + ve * 6;
                     const sineSpeed = time * 3;
+                    // Smooth amplitude from voice energy (no raw freq jitter)
+                    const sineAmp = (20 + ve * 120 + se * 60) * intensity;
+                    // Use fewer points for smoother curve
+                    const sineStep = Math.max(1, Math.floor(pts.length / 200));
                     const sinePts = [];
-                    for (let i = 0; i < pts.length; i++) {
+                    for (let i = 0; i < pts.length; i += sineStep) {
                         const pt = pts[i];
-                        const envelope2 = (10 + Math.abs(pt.d) * 1.2) * intensity;
-                        const sineVal = Math.sin(pt.t * sineFreq - sineSpeed) * envelope2;
                         let envFade;
                         if (layout === 'full') { envFade = Math.sin(pt.t * Math.PI); }
                         else { envFade = Math.pow(1 - pt.t, 0.8); }
+                        const sineVal = Math.sin(pt.t * sineFreq - sineSpeed) * sineAmp * envFade;
+                        // Only add ripple, no freq noise
                         let rippleD = 0;
                         for (const ripple of STATE.pulseLineRipples) {
                             const dist = Math.abs(pt.t - ripple.pos);
@@ -994,7 +1001,7 @@ class Visualizer {
                                 rippleD += Math.cos((dist / ripple.width) * Math.PI) * 0.5 * ripple.amplitude * ripple.alpha;
                             }
                         }
-                        sinePts.push({ x: pt.x, y: cy + (sineVal + rippleD) * sign * envFade });
+                        sinePts.push({ x: pt.x, y: cy + (sineVal + rippleD) * sign });
                     }
                     ctx.beginPath();
                     ctx.moveTo(sinePts[0].x, sinePts[0].y);
